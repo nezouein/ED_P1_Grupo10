@@ -1,7 +1,9 @@
+
 package Game;
 
 import javafx.animation.PauseTransition;
 import javafx.application.Application;
+import static javafx.application.Application.launch;
 import javafx.application.Platform;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -34,6 +36,10 @@ public class Launcher extends Application {
     private boolean computerVsComputer;
     private boolean humanVsHuman;
     private boolean gameFinished;
+
+    private Board previousBoard;
+    private boolean canUndo = false;
+    private Button undoButton;
 
     private MinimaxService minimax;
     private ComputerVsComputerService computerGame;
@@ -150,8 +156,13 @@ public class Launcher extends Application {
         Button menuButton = new Button("Volver al menú");
         menuButton.setPrefSize(180, 40);
         menuButton.setOnAction(e -> showMenu());
+        
+        undoButton = new Button("Deshacer");
+        undoButton.setPrefSize(180, 40);
+        undoButton.setDisable(true);
+        undoButton.setOnAction(e -> undoMove());
 
-        root.getChildren().addAll(statusLabel, createGrid(), menuButton);
+        root.getChildren().addAll(statusLabel, createGrid(), menuButton, undoButton);
 
         Scene scene = new Scene(root, 450, 600);
         mainStage.setScene(scene);
@@ -199,12 +210,18 @@ public class Launcher extends Application {
 
         if (!isHumanTurn) return;
 
+        previousBoard = new Board(gameBoard);
+        
         applyMove(row, column, humanSym);
         if (checkGameEnd()) return;
 
+        canUndo = true;
+        undoButton.setDisable(false);
+        
         isHumanTurn = false;
         updateStatus();
         executeComputerMove();
+
     }
 
     private void executeComputerMove() {
@@ -277,16 +294,18 @@ public class Launcher extends Application {
     }
 
     private void updateBoard() {
-        for (int i = 0; i < 3; i++) {
-            for (int j = 0; j < 3; j++) {
-                char symbol = gameBoard.getAt(i, j);
-                if (symbol != Board.EMPTY) {
-                    buttons[i][j].setText(String.valueOf(symbol));
-                    buttons[i][j].setDisable(true);
-                    styleButton(buttons[i][j], symbol);
-                }
-            }
+        updateBoardPosition(0);
+    }
+    private void updateBoardPosition(int position) {
+        if (position >= 9) {
+            return;
         }
+        int row = position / 3;
+        int column = position % 3;
+        char symbol = gameBoard.getAt(row, column);
+        buttons[row][column].setText(symbol == Board.EMPTY ? "" : String.valueOf(symbol));
+        buttons[row][column].setDisable(symbol != Board.EMPTY);
+        updateBoardPosition(position + 1);
     }
 
     private void styleButton(Button button, char symbol) {
@@ -371,6 +390,23 @@ public class Launcher extends Application {
                 buttons[i][j].setDisable(true);
             }
         }
+    }
+    
+    // SUSTENTACION
+    private void undoMove() {
+        if (!canUndo || previousBoard == null) {
+            return;
+        }
+        // Guardar la tabla anterior como la actual
+        gameBoard = new Board(previousBoard);
+        updateBoard();
+        // En el turno del humano se NO se puede deshacer
+        // y el botón de UNDO debe estar inactivo
+        isHumanTurn = true;
+        canUndo = false;
+        undoButton.setDisable(true);
+        // Cambiar el estado del tablero
+        updateStatus();
     }
 
     public static void main(String[] args) {
