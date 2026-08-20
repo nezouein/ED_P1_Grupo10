@@ -1,102 +1,379 @@
 package Game;
 
+import javafx.animation.PauseTransition;
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
-import javafx.scene.control.*;
-import javafx.scene.layout.*;
+import javafx.scene.control.Alert;
+import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.ChoiceDialog;
+import javafx.scene.control.Label;
+import javafx.scene.layout.GridPane;
+import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
+import javafx.util.Duration;
+
 import modelo.Board;
+import servicios.ComputerVsComputerService;
 import servicios.MinimaxService;
 
 public class Launcher extends Application {
-    private Board gameBoard = new Board();
-    private Button[][] buttons = new Button[3][3];
-    private char humanSym = 'X', compSym = 'O';
-    private boolean isHumanTurn = true;
+
+    private Stage mainStage;
+    private Board gameBoard;
+    private Button[][] buttons;
+    private Label statusLabel;
+
+    private char humanSym;
+    private char compSym;
+    private char currentHumanPlayer;
+
+    private boolean isHumanTurn;
+    private boolean computerVsComputer;
+    private boolean humanVsHuman;
+    private boolean gameFinished;
+
     private MinimaxService minimax;
+    private ComputerVsComputerService computerGame;
 
     @Override
     public void start(Stage stage) {
-        // DIÁLOGOS DE CONFIGURACIÓN
-        ChoiceDialog<String> dialog = new ChoiceDialog<>("X", "X", "O");
-        dialog.setTitle("Configuración");
-        dialog.setHeaderText("Tres en Raya - ESPOL");
-        dialog.setContentText("Selecciona tu símbolo:");
-        humanSym = dialog.showAndWait().orElse("X").charAt(0);
-        compSym = (humanSym == 'X') ? 'O' : 'X';
-        
-        Alert turnAlert = new Alert(Alert.AlertType.CONFIRMATION, "¿Deseas empezar tú?", ButtonType.YES, ButtonType.NO);
-        isHumanTurn = turnAlert.showAndWait().get() == ButtonType.YES;
+        this.mainStage = stage;
+        showMenu();
+    }
 
+    private void showMenu() {
+        gameFinished = true;
+
+        Label title = new Label("Tres en Raya");
+        title.setStyle("-fx-font-size: 30px; -fx-font-weight: bold;");
+
+        Label subtitle = new Label("Selecciona el modo de juego");
+        subtitle.setStyle("-fx-font-size: 16px;");
+
+        Button humanComputer = new Button("Humano vs Computadora");
+        Button computerComputer = new Button("Computadora vs Computadora");
+        Button humanHuman = new Button("Humano vs Humano");
+
+        humanComputer.setPrefSize(280, 50);
+        computerComputer.setPrefSize(280, 50);
+        humanHuman.setPrefSize(280, 50);
+
+        humanComputer.setOnAction(e -> startHumanComputer());
+        computerComputer.setOnAction(e -> startComputerComputer());
+        humanHuman.setOnAction(e -> startHumanHuman());
+
+        VBox menu = new VBox(18);
+        menu.setAlignment(Pos.CENTER);
+        menu.getChildren().addAll(title, subtitle, humanComputer, computerComputer, humanHuman);
+
+        Scene scene = new Scene(menu, 450, 550);
+        mainStage.setTitle("Tres en Raya");
+        mainStage.setScene(scene);
+        mainStage.show();
+    }
+
+    private void startHumanComputer() {
+        gameFinished = false;
+        computerVsComputer = false;
+        humanVsHuman = false;
+
+        selectHumanConfiguration();
+        gameBoard = new Board();
         minimax = new MinimaxService(compSym, humanSym);
 
+        createGameScene();
+
+        if (!isHumanTurn) {
+            executeComputerMove();
+        }
+    }
+
+    private void startComputerComputer() {
+        gameFinished = false;
+        computerVsComputer = true;
+        humanVsHuman = false;
+
+        gameBoard = new Board();
+        computerGame = new ComputerVsComputerService('X', 'O');
+
+        createGameScene();
+        executeComputerGame();
+    }
+
+    private void startHumanHuman() {
+        gameFinished = false;
+        computerVsComputer = false;
+        humanVsHuman = true;
+
+        gameBoard = new Board();
+        currentHumanPlayer = 'X';
+
+        createGameScene();
+        updateStatus();
+    }
+
+    private void selectHumanConfiguration() {
+        ChoiceDialog<String> symbolDialog = new ChoiceDialog<>("X", "X", "O");
+        symbolDialog.setTitle("Configuración");
+        symbolDialog.setHeaderText("Selecciona tu símbolo");
+        symbolDialog.setContentText("Símbolo:");
+
+        String selectedSymbol = symbolDialog.showAndWait().orElse("X");
+        humanSym = selectedSymbol.charAt(0);
+        compSym = (humanSym == 'X') ? 'O' : 'X';
+
+        Alert turnAlert = new Alert(Alert.AlertType.CONFIRMATION);
+        turnAlert.setTitle("Configuración");
+        turnAlert.setHeaderText("¿Quién comienza?");
+        turnAlert.setContentText("Selecciona quién realizará el primer movimiento.");
+
+        ButtonType humanButton = new ButtonType("Humano");
+        ButtonType computerButton = new ButtonType("Computadora");
+        turnAlert.getButtonTypes().setAll(humanButton, computerButton);
+
+        isHumanTurn = turnAlert.showAndWait().orElse(humanButton) == humanButton;
+    }
+
+    private void createGameScene() {
+        buttons = new Button[3][3];
+
+        VBox root = new VBox(15);
+        root.setAlignment(Pos.CENTER);
+        root.setStyle("-fx-padding: 20;");
+
+        statusLabel = new Label();
+        statusLabel.setStyle("-fx-font-size: 18px; -fx-font-weight: bold;");
+
+        Button menuButton = new Button("Volver al menú");
+        menuButton.setPrefSize(180, 40);
+        menuButton.setOnAction(e -> showMenu());
+
+        root.getChildren().addAll(statusLabel, createGrid(), menuButton);
+
+        Scene scene = new Scene(root, 450, 600);
+        mainStage.setScene(scene);
+        mainStage.show();
+
+        updateStatus();
+    }
+
+    private GridPane createGrid() {
         GridPane grid = new GridPane();
         grid.setAlignment(Pos.CENTER);
-        grid.setHgap(10); grid.setVgap(10);
+        grid.setHgap(8);
+        grid.setVgap(8);
         grid.setStyle("-fx-background-color: #eeeeee; -fx-padding: 20;");
 
         for (int i = 0; i < 3; i++) {
             for (int j = 0; j < 3; j++) {
-                Button b = new Button();
-                b.setPrefSize(100, 100);
-                b.setStyle("-fx-font-size: 2em; -fx-font-weight: bold; -fx-base: #ffffff;");
-                int r = i, c = j;
-                b.setOnAction(e -> handleMove(r, c));
-                buttons[i][j] = b;
-                grid.add(b, j, i);
+                Button button = new Button();
+                button.setPrefSize(110, 110);
+                button.setStyle("-fx-font-size: 32px; -fx-font-weight: bold;");
+
+                final int row = i;
+                final int col = j;
+                button.setOnAction(e -> handleMove(row, col));
+
+                buttons[i][j] = button;
+                grid.add(button, col, i);
             }
         }
-
-        stage.setScene(new Scene(grid, 420, 420));
-        stage.setTitle("Tres en Raya - Inteligencia Artificial");
-        stage.show();
-
-        if (!isHumanTurn) executeComputerMove();
+        return grid;
     }
 
-    private void handleMove(int r, int c) {
-        if (gameBoard.getAt(r, c) == Board.EMPTY && isHumanTurn) {
-            applyMove(r, c, humanSym);
-            if (!checkGameEnd()) {
-                isHumanTurn = false;
-                executeComputerMove();
-            }
+    private void handleMove(int row, int column) {
+        if (gameFinished || computerVsComputer) return;
+        if (gameBoard.getAt(row, column) != Board.EMPTY) return;
+
+        if (humanVsHuman) {
+            applyMove(row, column, currentHumanPlayer);
+            if (checkGameEnd()) return;
+
+            currentHumanPlayer = (currentHumanPlayer == 'X') ? 'O' : 'X';
+            updateStatus();
+            return;
         }
+
+        if (!isHumanTurn) return;
+
+        applyMove(row, column, humanSym);
+        if (checkGameEnd()) return;
+
+        isHumanTurn = false;
+        updateStatus();
+        executeComputerMove();
     }
 
     private void executeComputerMove() {
-        Board next = minimax.getBestMove(gameBoard);
-        if (next == null) return;
+        if (gameFinished) return;
+
+        statusLabel.setText("Turno de " + compSym + " (computadora)");
+
+        PauseTransition pause = new PauseTransition(Duration.seconds(1));
+        pause.setOnFinished(event -> {
+            if (gameFinished) return;
+
+            Board next = minimax.getBestMove(gameBoard);
+            if (next == null) return;
+
+            applyDifference(next, compSym);
+            if (checkGameEnd()) return;
+
+            isHumanTurn = true;
+            updateStatus();
+        });
+        pause.play();
+    }
+
+    private void executeComputerGame() {
+        if (gameFinished) return;
+
+        if (computerGame.isGameOver()) {
+            showComputerResultLater();
+            return;
+        }
+
+        char currentPlayer = computerGame.getCurrentPlayer();
+        String computerName = (currentPlayer == 'X') ? "Computadora 1" : "Computadora 2";
+        statusLabel.setText("Turno de " + computerName + " (" + currentPlayer + ")");
+
+        PauseTransition pause = new PauseTransition(Duration.seconds(1));
+        pause.setOnFinished(event -> {
+            if (gameFinished) return;
+
+            computerGame.playTurn();
+            gameBoard = computerGame.getBoard();
+            updateBoard();
+
+            if (computerGame.isGameOver()) {
+                showComputerResultLater();
+                return;
+            }
+
+            executeComputerGame();
+        });
+        pause.play();
+    }
+
+    private void applyDifference(Board next, char symbol) {
         for (int i = 0; i < 3; i++) {
             for (int j = 0; j < 3; j++) {
-                if (gameBoard.getAt(i, j) == Board.EMPTY && next.getAt(i, j) != Board.EMPTY) {
-                    applyMove(i, j, compSym);
+                if (gameBoard.getAt(i, j) == Board.EMPTY && next.getAt(i, j) == symbol) {
+                    applyMove(i, j, symbol);
+                    return;
                 }
             }
         }
-        checkGameEnd();
-        isHumanTurn = true;
     }
 
-    private void applyMove(int r, int c, char s) {
-        gameBoard.setMove(r, c, s);
-        buttons[r][c].setText(String.valueOf(s));
-        buttons[r][c].setDisable(true);
-        buttons[r][c].setStyle("-fx-font-size: 2em; -fx-font-weight: bold; -fx-text-fill: " + (s == 'X' ? "#0000FF" : "#FF0000") + "; -fx-opacity: 1;");
+    private void applyMove(int row, int column, char symbol) {
+        gameBoard.setMove(row, column, symbol);
+        buttons[row][column].setText(String.valueOf(symbol));
+        buttons[row][column].setDisable(true);
+        styleButton(buttons[row][column], symbol);
+    }
+
+    private void updateBoard() {
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                char symbol = gameBoard.getAt(i, j);
+                if (symbol != Board.EMPTY) {
+                    buttons[i][j].setText(String.valueOf(symbol));
+                    buttons[i][j].setDisable(true);
+                    styleButton(buttons[i][j], symbol);
+                }
+            }
+        }
+    }
+
+    private void styleButton(Button button, char symbol) {
+        String color = (symbol == 'X') ? "#0000FF" : "#FF0000";
+        button.setStyle("-fx-font-size: 32px; -fx-font-weight: bold; -fx-text-fill: " + color + ";");
+    }
+
+    private void updateStatus() {
+        if (humanVsHuman) {
+            statusLabel.setText("Turno del jugador " + currentHumanPlayer + " (" + currentHumanPlayer + ")");
+            return;
+        }
+
+        if (computerVsComputer) {
+            char current = computerGame.getCurrentPlayer();
+            String computerName = (current == 'X') ? "Computadora 1" : "Computadora 2";
+            statusLabel.setText("Turno de " + computerName + " (" + current + ")");
+            return;
+        }
+
+        if (isHumanTurn) {
+            statusLabel.setText("Turno de " + humanSym + " (su turno)");
+        } else {
+            statusLabel.setText("La computadora está pensando...");
+        }
     }
 
     private boolean checkGameEnd() {
-        char win = gameBoard.checkWinner();
-        if (win != Board.EMPTY || gameBoard.isFull()) {
-            String msg = (win == Board.EMPTY) ? "¡Es un Empate!" : "¡Ganador: " + win + "!";
-            Alert alert = new Alert(Alert.AlertType.INFORMATION, msg);
-            alert.setHeaderText("Fin de la partida");
-            alert.showAndWait();
+        if (gameFinished) return true;
+
+        char winner = gameBoard.checkWinner();
+        if (winner != Board.EMPTY) {
+            gameFinished = true;
+            disableBoard();
+            showResultLater("Ganador: " + winner);
             return true;
         }
+
+        if (gameBoard.isFull()) {
+            gameFinished = true;
+            disableBoard();
+            showResultLater("Empate");
+            return true;
+        }
+
         return false;
     }
 
-    public static void main(String[] args) { launch(args); }
+    private void showComputerResultLater() {
+        if (gameFinished) return;
+        gameFinished = true;
+
+        char winner = computerGame.getWinner();
+        String message;
+
+        if (winner == Board.EMPTY) {
+            message = "Empate";
+        } else {
+            String computerName = (winner == 'X') ? "Computadora 1" : "Computadora 2";
+            message = "Ganador: " + computerName + " (" + winner + ")!";
+        }
+
+        disableBoard();
+        showResultLater(message);
+    }
+
+    private void showResultLater(String message) {
+        Platform.runLater(() -> showResult(message));
+    }
+
+    private void showResult(String message) {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle("Fin de la partida");
+        alert.setHeaderText(message);
+        alert.showAndWait();
+    }
+
+    private void disableBoard() {
+        if (buttons == null) return;
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                buttons[i][j].setDisable(true);
+            }
+        }
+    }
+
+    public static void main(String[] args) {
+        launch(args);
+    }
 }

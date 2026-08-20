@@ -1,2 +1,4 @@
-# ED_P1_Grupo10
-Proyecto de Estructuras de Datos - Grupo 10
+# Proyecto ED - Grupo 10
+
+## Integrantes:
+.Ramon Leon
