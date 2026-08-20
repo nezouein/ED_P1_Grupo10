@@ -10,7 +10,6 @@ package Game;
  */
 public class Main {
     public static void main(String[] args) {
-        // Esto llama a tu juego sin que Maven se confunda
         Launcher.main(args);
     }
 }
